@@ -1,0 +1,362 @@
+---
+title: "MA678 Homework 5"
+author: "Jiun Lee"
+date: "10/25/2022"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyverse)
+library(foreign)
+library(rstanarm)
+library(AER)
+library(VGAM)
+library(GGally)
+library(brms)
+library(pscl)
+library(MASS)
+```
+
+## 15.1 Poisson and negative binomial regression
+
+The folder `RiskyBehavior` contains data from a randomized trial
+targeting couples at high risk of HIV infection. The intervention
+provided counseling sessions regarding practices that could reduce their
+likelihood of contracting HIV. Couples were randomized either to a
+control group, a group in which just the woman participated, or a group
+in which both members of the couple participated. One of the outcomes
+examined after three months was "number of unprotected sex acts."
+
+### a)
+
+Model this outcome as a function of treatment assignment using a Poisson
+regression. Does the model fit well? Is there evidence of
+overdispersion?
+
+```{r}
+set.seed=34
+risky <- read.csv("/Users/jiunlee/MSSP22/MA678/ROS-Examples-master/RiskyBehavior/data/risky.csv")
+risky$fupacts <- round(risky$fupacts)
+risky$couples <- factor(risky$couples)
+risky$women_alone <- factor(risky$women_alone)
+
+fit_151a <- glm(fupacts ~ women_alone, family=poisson, data=risky)
+summary(fit_151a)
+```
+
+-   The model has a poor fit even though the woman_alone factor appears
+    to be a statistically significant predictor.
+
+### b)
+
+Next extend the model to include pre-treatment measures of the outcome
+and the additional pre-treatment variables included in the dataset. Does
+the model fit well? Is there evidence of overdispersion?
+
+```{r}
+set.seed=589
+risky$c.bupacts <- (risky$bupacts - mean(risky$bupacts)) / (2 * sd(risky$bupacts))
+fit_151b <- glm(fupacts ~ women_alone + sex + c.bupacts + couples + bs_hiv, family=poisson, data=risky)
+summary(fit_151b)
+
+dispersiontest(fit_151b, trafo=1)
+
+```
+
+-   The model fits better but is still not optimal.It shows there are
+    some missing predictors in the model which would help explain the
+    variance of the outcome.
+-   The estimated overdispersion is 28.65, which is high.
+
+### c)
+
+Fit a negative binomial (overdispersed Poisson) model. What do you
+conclude regarding effectiveness of the intervention?
+
+```{r}
+set.seed=44 
+risky$c.bupacts <- (risky$bupacts - mean(risky$bupacts)) / (2 * sd(risky$bupacts))
+fit_151c <- glm(fupacts ~ women_alone + sex + c.bupacts + couples + bs_hiv, family=quasipoisson, data=risky)
+summary(fit_151c)
+```
+
+-   When only woman participated in counseling, this leads to a 48.31%
+    decrease(e\^(-0.66)=0.517) in count. When both partners took
+    counseling, the decrease is 33.63%(e\^(-0.40)=0.664).Therefore, We
+    can say there was effectiveness of the intervention of the
+    counseling.
+
+### d)
+
+These data include responses from both men and women from the
+participating couples. Does this give you any concern with regard to our
+modeling assumptions?
+
+-   Answer: This has a problem because the observations from the two
+    elements of the couple won't be i.i.d. High positive correlations
+    between the answers of same couple is expected.
+
+## 15.3 Binomial regression
+
+Redo the basketball shooting example on page 270, making some changes:
+
+### (a)
+
+Instead of having each player shoot 20 times, let the number of shots
+per player vary, drawn from the uniform distribution between 10 and 30.
+
+```{r}
+N <- 100
+height <- rnorm(N, 72, 3)
+p <- 0.4 + 0.1*(height - 72)/3
+nshots <- rdunif(N,10,30) #n
+y <- rbinom(N, nshots, p)
+data <- data.frame(n=nshots, y, height)
+```
+
+### (b)
+
+Instead of having the true probability of success be linear, have the
+true probability be a logistic function, set so that Pr(success) = 0.3
+for a player who is 5'9" and 0.4 for a 6' tall player.
+
+```{r}
+N <- 100
+height <- rnorm(N, 72, 3)
+p <- exp(0.4 + 0.1*(height - 72)/3)/1+exp(0.4 + 0.1*(height - 72)/3)
+nshots <- rdunif(N,10,30) #n
+y <- rbinom(N, nshots, p)
+data <- data.frame(n=nshots, y, height)
+```
+
+## 15.7 Tobit model for mixed discrete/continuous data
+
+Experimental data from the National Supported Work example are in the
+folder `Lalonde`. Use the treatment indicator and pre-treatment
+variables to predict post-treatment (1978) earnings using a Tobit model.
+Interpret the model coefficients.
+
+```{r}
+set.seed=98
+lal <- read.dta("/Users/jiunlee/MSSP22/MA678/ROS-Examples-master/Lalonde/NSW_dw_obs.dta")
+fit_lal <- vglm(re78~treat+re74+re75,family=tobit(), data = lal) 
+summary(fit_lal)
+```
+
+<Interpretation>
+
+\- The treatment group that has National Supported Work's support earn
+697.7 more than the comparison group.
+
+\- When 1 unit of re74 increases, the earning of 1978 increases by
+0.2689.
+
+\- When 1 unit of re75 increases, the earning of 1978 increases by
+0.5744.
+
+## 15.8 Robust linear regression using the t model
+
+The folder `Congress` has the votes for the Democratic and Republican
+candidates in each U.S. congressional district in 1988, along with the
+parties' vote proportions in 1986 and an indicator for whether the
+incumbent was running for reelection in 1988. For your analysis, just
+use the elections that were contested by both parties in both years.
+
+```{r}
+congress <- read.csv("/Users/jiunlee/MSSP22/MA678/ROS-Examples-master/Congress/data/congress.csv")
+```
+
+### (a)
+
+Fit a linear regression using `stan_glm` with the usual
+normal-distribution model for the errors predicting 1988 Democratic vote
+share from the other variables and assess model fit.
+
+```{r}
+set.seed=56
+fit_elec <- stan_glm(v88_adj ~ v86_adj + inc88, data=congress, refresh=0)
+r2_bayes <- bayes_R2(fit_elec)
+print(c(median(r2_bayes)))
+```
+
+### (b)
+
+Fit the same sort of model using the `brms` package with a $t$
+distribution, using the `brm` function with the student family. Again
+assess model fit.
+
+```{r}
+set.seed=90
+fit_elecb <- brm(v88_adj ~ v86_adj+inc88,
+                 data=congress,family=student(link = "identity", link_sigma = "log", link_nu = "logm1"))
+r2_bayesb <- bayes_R2(fit_elecb)
+print(c(median(r2_bayesb)))
+```
+
+### (c)
+
+Which model do you prefer?
+
+-   Answer: I prefer the second model. R-squared of the second model is
+    bigger than the first model. It means the second model fits the
+    observations better than the first model.
+
+## 15.9 Robust regression for binary data using the robit model
+
+Use the same data as the previous example with the goal instead of
+predicting for each district whether it was won by the Democratic or
+Republican candidate.\
+\### (a) Fit a standard logistic or probit regression and assess model
+fit.
+
+```{r}
+set.seed=89
+congress <- congress %>% mutate(win88=ifelse(congress$v88_adj>0.5,1,0))
+#probit
+fit_159a <- glm(win88 ~ v86_adj + inc88, family=binomial(link="probit"), data=congress)
+
+# pseudo Rsquared
+pR2(fit_159a)
+```
+
+-   The Rsquared(McFadden) is 0.8718726. The model fits well.
+
+### (b)
+
+Fit a robit regression and assess model fit.
+
+```{r}
+set.seed=467
+fit_159b <- stan_glm(win88 ~ v86_adj + inc88,data=congress, chains=4, iter=1000, refresh=0)
+r2_robit <- bayes_R2(fit_159b)
+print(median(r2_robit))
+```
+
+-   The Rsquared is 0.8907552. The model fits well.
+
+### (c)
+
+Which model do you prefer?
+
+-   Answer: Since the robit regression model's Rsquared is bigger, I
+    prefer the robit regression model.
+
+## 15.14 Model checking for count data
+
+The folder `RiskyBehavior` contains data from a study of behavior of
+couples at risk for HIV; see Exercise 15.1.
+
+### (a)
+
+Fit a Poisson regression predicting number of unprotected sex acts from
+baseline HIV status. Perform predictive simulation to generate 1000
+datasets and record the percentage of observations that are equal to 0
+and the percentage that are greater than 10 (the third quartile in the
+observed data) for each. Compare these to the observed value in the
+original data.
+
+```{r}
+set.seed=899
+fit_1514 <- stan_glm(risky$fupacts~risky$bs_hiv,family=poisson(link="log"),data=risky,refresh=0)
+nsims=1000
+risky2 <- data.frame(risky$fupacts,risky$bs_hiv)
+predic <- posterior_predict(fit_1514, newdata=risky2,draws=nsims)
+zerosum <- NULL
+tensum <- NULL
+for (i in 1:1000) {
+zerosum <- c(zerosum, sum(predic[i,] == 0))
+tensum <- c(tensum, sum(predic[i,] > 10))
+}
+#percentage of predict
+summary((zerosum/ncol(predic))*100)
+summary((tensum/ncol(predic))*100)
+
+#percentage of original
+sum(ifelse(risky$fupacts==0,1,0))/nrow(risky)
+sum(ifelse(risky$fupacts>10,1,0))/nrow(risky)
+
+```
+
+### (b)
+
+Repeat (a) using a negative binomial (overdispersed Poisson) regression.
+
+```{r}
+set.seed=353
+fit_1514b <- stan_glm.nb(risky$fupacts~risky$bs_hiv,data=risky,refresh=0)
+nsims=1000
+risky2 <- data.frame(risky$fupacts,risky$bs_hiv)
+predic2 <- posterior_predict(fit_1514b, newdata=risky2,draws=nsims)
+zerosum1 <- NULL
+tensum1 <- NULL
+for (i in 1:1000) {
+zerosum1 <- c(zerosum1, sum(predic2[i,] == 0))
+tensum1 <- c(tensum1, sum(predic2[i,] > 10))
+}
+#percentage of predict
+summary((zerosum1/ncol(predic2))*100)
+summary((tensum1/ncol(predic2))*100)
+
+#percentage of original
+sum(ifelse(risky$fupacts==0,1,0))/nrow(risky)
+sum(ifelse(risky$fupacts>10,1,0))/nrow(risky)
+```
+
+### (c)
+
+Repeat (b), also including ethnicity and baseline number of unprotected
+sex acts as inputs.
+
+```{r}
+set.seed=123
+fit_1514c <- stan_glm.nb(risky$fupacts~risky$bs_hiv+risky$bupacts,data=risky,refresh=0)
+nsims=1000
+risky3 <- data.frame(risky$fupacts,risky$bs_hiv,risky$bupacts)
+predic3 <- posterior_predict(fit_1514c, newdata=risky3,draws=nsims)
+zerosum2 <- NULL
+tensum2 <- NULL
+for (i in 1:1000) {
+zerosum2 <- c(zerosum2, sum(predic3[i,] == 0))
+tensum2 <- c(tensum2, sum(predic3[i,] > 10))
+}
+#percentage of predict
+summary((zerosum2/ncol(predic3))*100)
+summary((tensum2/ncol(predic3))*100)
+
+#percentage of original
+sum(ifelse(risky$fupacts==0,1,0))/nrow(risky)
+sum(ifelse(risky$fupacts>10,1,0))/nrow(risky)
+```
+
+## 15.15 Summarizing inferences and predictions using simulation
+
+Exercise 15.7 used a Tobit model to fit a regression with an outcome
+that had mixed discrete and continuous data. In this exercise you will
+revisit these data and build a two-step model: (1) logistic regression
+for zero earnings versus positive earnings, and (2) linear regression
+for level of earnings given earnings are positive. Compare predictions
+that result from each of these models with each other.
+
+```{r}
+#1
+set.seed=67
+lal <- lal %>% mutate(pos_earn=ifelse(lal$re78==0,0,1))
+fit_lal2 <- glm(pos_earn~treat+re74+re75,family=binomial(link="logit"), data = lal)
+summary(fit_lal2)
+
+pR2(fit_lal2)
+
+#2
+lal_pos <- lal[lal$re78 > 0, ] #delete the rows(re78==0)
+fit_lal3 <- lm(re78~treat+re74+re75, data = lal_pos) 
+summary(fit_lal3)
+```
+
+-   Rsquared of the logistic model is 0.1455.(McFadden), and Rsquared of
+    the linear model is 0.5183. Therefore, the linear model fits better
+    than the logistic model.

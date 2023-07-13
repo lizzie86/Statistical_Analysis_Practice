@@ -1,0 +1,283 @@
+---
+title: "MA678 Homework 3"
+author: "Jiun Lee"
+date: "9/27/2022"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rstanarm)
+```
+
+## 4.4 Designing an experiment
+
+You want to gather data to determine which of two students is a better
+basketball shooter. You plan to have each student take N shots and then
+compare their shooting percentages. Roughly how large does N have to be
+for you to have a good chance of distinguishing a 30% shooter from a 40%
+ \newcommand{\ci}{\perp\!\!\!\perp} 
+
+$$\begin{equation}
+P1=0.30,\ P2=0.40\\
+  H0: P1=P2\\
+  H1: P1\neq P2\\
+ \hat{P}= 0.4-0.3 =0.1\\Z = \hat{P}/ \sqrt{\hat{P}(1- \hat{P})/N}\\=0.10/\sqrt{0.09/N}\\1.96<Z\\N>34.57\\N>= 35
+\end{equation}$$ 
+
+Therefore, N has to be at least 35 to distinguish a 30%
+shooter from a 40% shooter.
+
+## 4.6 Hypothesis testing
+
+The following are the proportions of girl births in Vienna for each
+month in girl births 1908 and 1909 (out of an average of 3900 births per
+month):
+
+```{r}
+set.seed(989)
+birthdata <- c(.4777,.4875,.4859,.4754,.4874,.4864,.4813,.4787,.4895,.4797,.4876,.4859,
+               .4857,.4907,.5010,.4903,.4860,.4911,.4871,.4725,.4822,.4870,.4823,.4973)
+girls_data <- read.csv("/Users/jiunlee/MSSP22/MA678/ROS-Examples-master/Girls/girls.dat")
+```
+
+The data are in the folder `Girls`. These proportions were used by von
+Mises (1957) to support a claim that that the sex ratios were less
+variable than would be expected under the binomial distribution. We
+think von Mises was mistaken in that he did not account for the
+possibility that this discrepancy could arise just by chance.
+
+### (a)
+
+Compute the standard deviation of these proportions and compare to the
+standard deviation that would be expected if the sexes of babies were
+independently decided with a constant probability over the 24-month
+period.
+
+```{r}
+sd(birthdata)
+ind_birth <- replicate(24,rbinom(3900,1,birthdata))
+sum_girls <- apply(ind_birth,2,sum)
+prop_girls <- sum_girls/3900
+sd(prop_girls)
+
+```
+
+### (b)
+
+The observed standard deviation of the 24 proportions will not be
+identical to its theoretical expectation. In this case, is this
+difference small enough to be explained by random variation? Under the
+randomness model, the actual variance should have a distribution with
+expected value equal to the theoretical variance, and proportional to a
+$\chi^2$ random variable with 23 degrees of freedom; see page 53.
+
+\newcommand{\ci}{\perp\!\!\!\perp} 
+$$\begin{equation}
+k=23
+\\Y: Actual\ Variance
+\\E(Y): Expected \ Value\ of\ Y
+\\expdev = 0.008
+\\E(Y) = expdev^2\\ =c\cdot E(\chi^2)
+\\expdev^2 = c\cdot 23
+\\c = expdev^2/23
+\\var(Y) = var(c\cdot\chi^2)\\ = c^2\cdot var(\chi^2)\\=c^2\cdot 2k
+\\ \therefore sd(Y)=c \cdot \sqrt(2\cdot23)
+\\Upperbound:
+\\10.19e-05 = expdev^2+(expdev^2)/23\sqrt(46)\cdot2
+\\Lowerbound:
+\\2.630e-05 = expdev^2-(expdev^2)/23\sqrt(46)\cdot2
+\\Observed\ variance(observed\ deviance^2=4.108457e-05)\ is\ within\ the\ confidence\ interval.
+\\So, the\ difference\ is\ small\ enough\ to\ be\ explained\ by\ random\ variation.
+
+\end{equation}$$
+
+## 5.5 Distribution of averages and differences
+
+The heights of men in the United States are approximately normally
+distributed with mean 69.1 inches and standard deviation 2.9 inches. The
+heights of women are approximately normally distributed with mean 63.7
+inches and standard deviation 2.7 inches. Let $x$ be the average height
+of 100 randomly sampled men, and $y$ be the average height of 00
+randomly sampled women. In R, create 1000 simulations of $x - y$ and
+plot their histogram. Using the simulations, compute the mean and
+standard deviation of the distribution of $x - y$ and compare to their
+exact values.
+
+```{r}
+set.seed(1457)
+xy_sims <- 100
+sims2 <- 1000
+x <- replicate(sims2,rnorm(xy_sims, 69.1, 2.9))
+y <- replicate(sims2,rnorm(xy_sims, 63.7, 2.7))
+
+hist(x-y, main = "Distribution of x-y")
+mean(x-y)
+sd(x-y)
+ 
+```
+
+## 5.8 Coverage of confidence intervals:
+
+On page 15 there is a discussion of an experimental study of an
+education-related intervention in Jamaica, in which the point estimate
+of the treatment effect, on the log scale, was 0.35 with a standard
+error of 0.17. Suppose the true effect is 0.10---this seems more
+realistic than the point estimate of 0.35---so that the treatment on
+average would increase earnings by 0.10 on the log scale. Use simulation
+to study the statistical properties of this experiment, assuming the
+standard error is 0.17.
+
+### (a)
+
+Simulate 1000 independent replications of the experiment assuming that
+the point estimate is normally distributed with mean 0.10 and standard
+deviation 0.17.
+
+```{r}
+set.seed(489)
+sim_58a <- 1000
+N <- 127 #number of children
+rep_exp <- replicate(sim_58a,rnorm(N, 0.10, 0.17))   #127rows 1000columns
+```
+
+### (b)
+
+For each replication, compute the 95% confidence interval. Check how
+many of these intervals include the true parameter value.
+
+```{r}
+conf_int <- matrix(NA, nrow = dim(rep_exp)[2], ncol = 2)
+for (i in 1:dim(rep_exp)[2]) {
+    temp <- t.test(rep_exp[, i], conf.level = 0.95)
+    conf_int[i, ] <- temp$conf.int
+}
+colnames(conf_int) <- c("left", "right")
+
+indx <- (conf_int[,1] <= 0.10) & (conf_int[,2] >= 0.10) 
+sum(indx)
+
+```
+
+### (c)
+
+Compute the average and standard deviation of the 1000 point estimates;
+these represent the mean and standard deviation of the sampling
+distribution of the estimated treatment effect.
+
+```{r}
+for(i in 1:dim(rep_exp)[2]){
+  avg_rep <- mean(rep_exp[,i])
+  sd_rep <- sd(rep_exp[,i])
+}
+avg_rep
+sd_rep
+```
+
+## 10.3 Checking statistical significance
+
+In this exercise and the next, you will simulate two variables that are
+statistically independent of each other to see what happens when we run
+a regression to predict one from the other. Generate 1000 data points
+from a normal distribution with mean 0 and standard deviation 1 by
+typing `var1 <- rnorm(1000,0,1)` in R. Generate another variable in the
+same way (call it `var2`). Run a regression of one variable on the
+other. Is the slope coefficient "statistically significant"? We do not
+recommend summarizing regressions in this way, but it can be useful to
+understand how this works, given that others will do so.
+
+```{r}
+set.seed(89)
+var1 <- rnorm(1000,0,1)
+var2 <- rnorm(1000,0,1)
+data103 <- data.frame(var1,var2)
+fit_103_1 <- lm(var1 ~ var2, data=data103)
+# P-value:0.6702
+fit_103_2 <- lm(var2 ~ var1, data = data103)
+# P-value:0.6702
+
+#In both regressions, the slope coefficient's P-values are more than 0.05. Therefore, their slope coefficients are statistically significant.
+```
+
+## 11.3 Coverage of confidence intervals
+
+Consider the following procedure:
+
+-   Set $n = 100$ and draw $n$ continuous values $x_i$ uniformly
+    distributed between 0 and 10. Then simulate data from the model
+    $y_i = a + b x_i + \text{error}_i$, for $i = 1, \ldots, n$, with
+    $a = 2$, $b = 3$, and independent errors from a normal distribution.
+
+-   Regress $y$ on $x$. Look at the median and mad sd of $b$. Check to
+    see if the interval formed by the median $\pm$ 2 mad sd includes the
+    true value, $b = 3$.
+
+-   Repeat the above two steps 1000 times.
+
+```{r}
+set.seed(123498)
+n <- 100
+a=2
+b=3
+
+fun_fit <- function(a,b,n) {
+      xi <- runif(n,0,10)
+      error<- rnorm(n) 
+      y <- a + b*xi + error
+      lm(y ~ xi)
+      
+      diff=sum(abs(xi-median(xi)))
+      mad = diff/n
+      left <- median(xi)-2*mad
+      right <- median(xi)+2*mad
+      return(c(left,right,mad))
+}
+
+#simulating 1000times
+simul <- 1000
+output_r <- integer(simul)
+output_l <- integer(simul)
+output_mad <- integer(simul)
+for(i in 1:simul){
+  output_l[i] <- fun_fit(a,b,n)[1]
+  output_r[i] <- fun_fit(a,b,n)[2]
+  output_mad[i] <- fun_fit(a,b,n)[3]
+  
+}
+output <- as.data.frame(cbind(output_l,output_r,output_mad))
+colnames(output) <- c("left", "right","mad")
+
+output <- transform(output,inc_true=ifelse(output$right>=b & output$left<=b,1,0))
+
+
+
+```
+
+### (a)
+
+True or false: the interval should contain the true value approximately
+950 times. Explain your answer.
+
+Answer)
+
+```{r}
+num_of_intervals_incld_true <- sum(output$inc_true)
+```
+
+True: The 1000 confident intervals generated from 1000 times of
+simulations all contain true values. It proves the assumption that
+approximately 950 confidence intervals for each sample(the median $\pm$
+2 mad sd) from repeating 1000times of simulation will contain the true
+value.
+
+### (b)
+
+Same as above, except the error distribution is bimodal, not normal.
+True or false: the interval should contain the true value approximately
+950 times. Explain your answer.
+
+Answer) False. Confidence Interval cannot be existed without normal
+distribution.
