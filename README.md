@@ -1,1 +1,1 @@
-# Statistical_Analysis_Practice
+# Statistical_Modeling_Practice
